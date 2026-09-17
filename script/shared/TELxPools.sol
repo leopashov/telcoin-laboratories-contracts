@@ -44,6 +44,8 @@ library TELxPools {
     int24 internal constant SPACING_LOW = 10;
 
     uint8 internal constant DECIMALS_TEL = 18;
+    /// @notice Legacy TEL. Only the test pool below uses it; never mix it into TEL v3 math.
+    uint8 internal constant DECIMALS_TEL_V2 = 2;
     uint8 internal constant DECIMALS_ETH = 18;
     uint8 internal constant DECIMALS_STABLE = 6;
 
@@ -88,6 +90,22 @@ library TELxPools {
                 decimals1: DECIMALS_TEL,
                 symbol0: "eUSD",
                 symbol1: "TEL",
+                chainId: EthereumAddresses.CHAIN_ID
+            });
+        } else if (key == keccak256("ETHEREUM_EUSD_TELV2")) {
+            // Test pool, NOT part of the standardized set and deliberately absent from `allNames`.
+            // Pairs eUSD with legacy 2-decimal TEL so the hookless pool, registry and subscriber
+            // flow can be exercised end to end on mainnet before TEL v3 has supply.
+            s = PoolSpec({
+                currency0: EthereumAddresses.EUSD,
+                currency1: EthereumAddresses.TEL_V2,
+                fee: FEE_MEDIUM,
+                tickSpacing: SPACING_MEDIUM,
+                hooks: address(0),
+                decimals0: DECIMALS_STABLE,
+                decimals1: DECIMALS_TEL_V2,
+                symbol0: "eUSD",
+                symbol1: "TELv2",
                 chainId: EthereumAddresses.CHAIN_ID
             });
             // --- Polygon ---

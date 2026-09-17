@@ -7,6 +7,7 @@
     "POLYGON_EUSD_TEL":  { "amount0": 0, "amount1": 0, "widthBps": 1000 },
     "POLYGON_EUSD_EMXN": { "amount0": 0, "amount1": 0, "widthBps": 100 },
     "BASE_ETH_TEL":      { "amount0": 0, "amount1": 0, "widthBps": 1000 },
-    "BASE_EUSD_TEL":     { "amount0": 0, "amount1": 0, "widthBps": 1000 }
+    "BASE_EUSD_TEL":     { "amount0": 0, "amount1": 0, "widthBps": 1000 },
+    "ETHEREUM_EUSD_TELV2": { "amount0": 10, "amount1": 6969, "widthBps": 0 }
   }
 }

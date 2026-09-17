@@ -11,6 +11,8 @@ import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {CreateV4Pool} from "../../script/telx/CreateV4Pool.s.sol";
 import {SeedV4Liquidity} from "../../script/telx/SeedV4Liquidity.s.sol";
+import {DeployTELxTestRegistry} from "../../script/telx/DeployTELxTestRegistry.s.sol";
+import {SubscribeV4Position} from "../../script/telx/SubscribeV4Position.s.sol";
 import {TELxPools} from "../../script/shared/TELxPools.sol";
 import {V4PoolMath} from "../../script/shared/V4PoolMath.sol";
 import {PositionRegistry} from "../../contracts/telx/core/PositionRegistry.sol";
@@ -50,6 +52,9 @@ abstract contract TELxPoolLifecycleForkTest is Test {
     string internal poolName;
     uint256 internal amount0Human;
     uint256 internal amount1Human;
+    /// @dev Legacy TEL on Ethereum returns a constant totalSupply with no backing slot, so `deal`
+    ///      cannot adjust it. Chains whose tokens can be adjusted leave this on.
+    bool internal adjustTotalSupply = true;
 
     function _setUpChain() internal {
         string memory rpc = vm.envOr(rpcEnvVar, string(""));
@@ -86,9 +91,9 @@ abstract contract TELxPoolLifecycleForkTest is Test {
         if (TELxPools.isNativeCurrency0(s)) {
             vm.deal(signer, raw0);
         } else {
-            deal(s.currency0, signer, raw0, true);
+            deal(s.currency0, signer, raw0, adjustTotalSupply);
         }
-        deal(s.currency1, signer, raw1, true);
+        deal(s.currency1, signer, raw1, adjustTotalSupply);
     }
 
     function _positionManager() internal view virtual returns (address);
@@ -308,6 +313,53 @@ contract BaseTELxPoolLifecycleForkTest is TELxPoolLifecycleForkTest {
 
     function _stateView() internal pure override returns (address) {
         return 0xA3c0c9b65baD0b08107Aa264b0f3dB444b867A71;
+    }
+
+    function _foreignPoolName() internal pure override returns (string memory) {
+        return "POLYGON_EUSD_TEL";
+    }
+}
+
+/// @title EthereumTELxTestPoolLifecycleForkTest
+/// @notice Runs the lifecycle against the Ethereum eUSD / legacy TEL test pool: 6 decimals against
+///         2, and a price below 1 in raw units, which the TEL v3 pools never produce.
+contract EthereumTELxTestPoolLifecycleForkTest is TELxPoolLifecycleForkTest {
+    function setUp() public {
+        rpcEnvVar = "ETHEREUM_RPC_URL";
+        poolName = "ETHEREUM_EUSD_TELV2";
+        amount0Human = 10; // eUSD
+        amount1Human = 6_969; // TEL v2, ~0.001435 USD per TEL
+        adjustTotalSupply = false;
+        _setUpChain();
+    }
+
+    /// @notice The exact sequence run live: EOA test registry deploy, create, full-range seed and
+    ///         subscribe, each through its script.
+    function test_liveSequence_throughScripts() public {
+        (PositionRegistry testRegistry, TELxSubscriber testSubscriber) =
+            new DeployTELxTestRegistry().runWithSigner(signer);
+        assertTrue(testRegistry.hasRole(testRegistry.DEFAULT_ADMIN_ROLE(), signer), "admin");
+        assertEq(testSubscriber.owner(), signer, "subscriber owner");
+
+        (, uint160 sqrtPriceX96) = createScript.runWithSigner(poolName, amount0Human, amount1Human, signer);
+        // price is TEL per eUSD in raw units: 6969e2 / 10e6, i.e. ~0.001435 USD per TEL
+        uint256 rawPriceE18 = (uint256(sqrtPriceX96) * uint256(sqrtPriceX96) >> 96) * 1e18 >> 96;
+        assertApproxEqRel(rawPriceE18, 0.06969e18, 0.0001e18, "opening price");
+
+        uint256 tokenId = seedScript.runWithSigner(poolName, amount0Human, amount1Human, 0, signer);
+        new SubscribeV4Position().runWithSigner(tokenId, address(testSubscriber), signer);
+
+        uint256[] memory votable = testRegistry.getSubscriptions(signer);
+        assertEq(votable.length, 1, "expected one votable position");
+        assertEq(votable[0], tokenId, "wrong tokenId");
+    }
+
+    function _positionManager() internal pure override returns (address) {
+        return 0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e;
+    }
+
+    function _stateView() internal pure override returns (address) {
+        return 0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227;
     }
 
     function _foreignPoolName() internal pure override returns (string memory) {
